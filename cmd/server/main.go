@@ -13,6 +13,17 @@ import (
 
 
 )
+
+func handlerWrite(gl routing.GameLog) pubsub.AckType {
+	err := gamelogic.WriteLog(gl)
+	if err != nil {
+		return pubsub.NackDiscard
+	}
+
+	return pubsub.Ack
+	
+}
+
 func main() {
 	fmt.Println("Starting Peril server...")
 
@@ -35,7 +46,12 @@ func main() {
 		return
 	}
 
-	pubsub.DeclareAndBind(myConnection, routing.ExchangePerilTopic, "game_logs", "game_logs", pubsub.Durable)
+	pubsub.DeclareAndBind(myConnection, routing.ExchangePerilTopic, "game_logs", "game_logs.*", pubsub.Durable)
+
+	err = pubsub.SubscribeGob(myConnection, routing.ExchangePerilTopic, "game_logs", "game_logs.*", pubsub.Durable, handlerWrite)
+	if err != nil {
+		fmt.Println("Server could not subscribe to game log:", err)
+	}
 
 	gamelogic.PrintServerHelp()
 

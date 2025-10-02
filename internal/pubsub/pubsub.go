@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"bytes"
+	//"io"
 )
 
 type SimpleQueueType int
@@ -52,6 +53,59 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	return err
 }
 
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	simpleQueueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	channel, _, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	if err != nil {
+		return err
+	}
+
+	err = channel.Qos(10, 0, true)
+	if err != nil {
+		return err
+	}
+	deliverChan, err := channel.Consume(queueName, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for content := range deliverChan {
+			var data T
+			reader := bytes.NewReader(content.Body)
+			decoder := gob.NewDecoder(reader)
+			err = decoder.Decode(&data)
+			if err != nil {
+				fmt.Println("Error decoding gob:", err)
+				content.Nack(false, false)
+				continue
+			}
+
+			fmt.Println(data)
+			outcome := handler(data) 
+			switch outcome {
+				case Ack:
+					content.Ack(false)
+				case NackDiscard:
+					content.Nack(false, false)
+				case NackRequeue:
+					content.Nack(false, true)
+				default:
+					content.Nack(false, false)
+			}
+
+		}
+	}()
+
+	return nil
+}
+
 func SubscribeJSON[T any](
 	conn *amqp.Connection,
 	exchange,
@@ -61,6 +115,11 @@ func SubscribeJSON[T any](
 	handler func(T) AckType,
 ) error {
 	channel, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	if err != nil {
+		return err
+	}
+
+	err = channel.Qos(10, 0, true)
 	if err != nil {
 		return err
 	}

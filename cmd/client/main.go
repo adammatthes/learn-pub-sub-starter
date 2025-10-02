@@ -4,7 +4,7 @@ import (
 	"fmt"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"time"
-
+	"strconv"
 	//"os"
 	//"os/signal"
 
@@ -221,7 +221,20 @@ func main() {
 			case "help":
 				gamelogic.PrintClientHelp()
 			case "spam":
-				fmt.Println("Spamming not allowed yet")
+				if len(input) != 2 {
+					fmt.Println("Invalid use of spam command.")
+					break
+				}
+				n, err := strconv.Atoi(input[1])
+				if err != nil {
+					fmt.Println("Invalid number for spam")
+					break
+				}
+
+				for i := 0; i < n; i++ {
+					malLog := gamelogic.GetMaliciousLog()
+					publishGameLog(gameState, moveChan, fmt.Sprintf("%v", malLog))
+				}
 			case "quit":
 				gamelogic.PrintQuit()
 			default:
